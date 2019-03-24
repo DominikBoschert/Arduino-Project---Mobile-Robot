@@ -1,5 +1,8 @@
 #include <SPI.h>
 #include <MFRC522.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2); //Define Display
 
 //Define configurable pins
 #define RST_PIN 9
@@ -16,13 +19,19 @@ byte userList[1][16] = {
 unsigned long currentMillis;
 unsigned long oldMillis;
 unsigned long usageTime = 0;
+unsigned long sessionTime = 0;
 const unsigned long interval = 1000;
+int buzzer = 8;
 
 //Init
 void setup(){
   Serial.begin(9600); //Initialize serial communication
   SPI.begin();        //Init SPI
+  lcd.init();         //Init LCD
+  lcd.backlight();    //Turn on Backlight
+  UpdateLCD(0, 0, "Sperre aktiv");
   mfrc522.PCD_Init(); //Init MFRC522
+  pinMode(buzzer, OUTPUT);
   currentUser = -1;
 
   //Create Key A and B (assuming default keys which are usually "0xFF 0xFF 0xFF 0xFF 0xFF 0xFF"
@@ -37,11 +46,13 @@ void setup(){
 
 void loop() {
   if(currentUser == 0 || currentUser == 1){
-    Serial.print(currentUser);
+    //Serial.print(currentUser);
     currentMillis = millis();
     if(currentMillis - oldMillis >= interval){
-      Serial.println("DEBUG!!!!");
-      CountUsageTime();
+      //Serial.println("DEBUG!!!!");
+      CountTime();
+      UpdateLCD(0, 0, TimeToString(sessionTime, 0));
+      UpdateLCD(0, 1, TimeToString(usageTime, 1));
     }
     currentUser = RFIDCheck(4, currentUser);
     
@@ -52,6 +63,9 @@ void loop() {
       Serial.println(usageTime);
       currentMillis = millis();
       oldMillis = currentMillis;
+      UpdateLCD(0, 0, TimeToString(sessionTime, 0));
+      //usageTime = 86395;
+      UpdateLCD(0, 1, TimeToString(usageTime, 1));
     }
   }
 }
@@ -179,6 +193,12 @@ long RFIDCheck(byte block, long userID){
         Serial.print("usageTime: ");
         Serial.println(usageTime);
         Serial.println();
+        for(int i = 0; i < 100; i++){
+          digitalWrite(buzzer,HIGH);
+          delay(2);
+          digitalWrite(buzzer,LOW);
+          delay(2);
+        }
         break;
       }
       else {
@@ -189,7 +209,7 @@ long RFIDCheck(byte block, long userID){
     }
   }
   else{
-    //Write data
+    //Write usageTime to PICC
     byte dataBlock[16] = {usageTime};
     Serial.print("Writing data to block ");
     Serial.println(block);
@@ -205,6 +225,14 @@ long RFIDCheck(byte block, long userID){
     }
     Serial.println();
     UID = -1;
+    UpdateLCD(0,1,"");
+    UpdateLCD(0,0, "Sperre aktiv");
+    for(int i = 0; i < 80; i++){
+      digitalWrite(buzzer,HIGH);
+      delay(1);
+      digitalWrite(buzzer,LOW);
+      delay(1);
+    }
   }
   //Stop PICC authentication
   mfrc522.PICC_HaltA();
@@ -213,9 +241,12 @@ long RFIDCheck(byte block, long userID){
   return UID;
 }
 
-void CountUsageTime(){
+void CountTime(){
+  sessionTime++;
   usageTime++;
   oldMillis = currentMillis;
+  Serial.print("sessionTime: ");
+  Serial.println(sessionTime);
   Serial.print("usageTime: ");
   Serial.println(usageTime);
 }
@@ -232,4 +263,43 @@ void DumpByteArrayAsHex(byte *buffer, byte bufferSize) {
     Serial.print(buffer[i] < 0x10 ? " 0" : " ");
     Serial.print(buffer[i], HEX);
   }
+}
+
+void UpdateLCD(int pos, int line, char * text){
+  lcd.setCursor(pos, line);
+  lcd.print(text);
+  Serial.print("Text: ");
+  Serial.println(text);
+  Serial.print("Sizeof(text): ");
+  Serial.println(strlen(text));
+  for(int i = strlen(text); i < 16; i++){
+    lcd.write(' ');
+  }
+}
+
+char * TimeToString(unsigned long t, int type){
+  Serial.print("Type: ");
+  Serial.print(type);
+  Serial.print(" - Time: ");
+  Serial.println(t);
+  static char str[16];
+  if(type == 0){
+    int h = t / 3600;
+    t = t % 3600;
+    int m = t/60;
+    int s = t % 60;
+    sprintf(str, "%04d:%02d:%02d", h, m, s);
+  }
+  else if(type == 1){
+    int d = t / 86400;
+    t = t % 86400;
+    int h = t / 3600;
+    t = t % 3600;
+    int m = t/60;
+    int s = t % 60;
+    sprintf(str, "%02d Tage %02d:%02d:%02d", d, h, m, s);
+  }
+  //sprintf(str, "%02d:%02d:%02d:%02d", d, h, m, s);
+  //sprintf(str, "%04d:%02d:%02d", h, m, s);
+  return str; 
 }

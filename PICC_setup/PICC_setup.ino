@@ -21,6 +21,11 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);   //Create instance
 
 //Declare variables
 MFRC522::MIFARE_Key key;
+  //Set sector, block, trailerblock and value to write
+  byte sector = 0;
+  byte blockAddr = 1;
+  byte dataBlock[16] = "This is a test";
+  byte trailerBlock = 3;
 
 //Init
 void setup(){
@@ -66,14 +71,6 @@ void loop(){
     Serial.println("This script only works with MIFARE Classic.");
     return;
   }
-  
-  //Set sector, block, trailerblock and value to write
-  byte sector = 1;
-  byte blockAddr = 4;
-  byte dataBlock[16] = {
-    0x03
-  };
-  byte trailerBlock = 7;
 
   //Declare status and buffer, declare and initialize size variables
   MFRC522::StatusCode status;
