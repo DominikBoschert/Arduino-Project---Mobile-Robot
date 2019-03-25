@@ -55,7 +55,9 @@ void loop() {
       UpdateLCD(0, 1, TimeToString(usageTime, 1));
     }
     currentUser = RFIDCheck(4, currentUser);
-    
+    if(Serial.available()){
+      Serial.println((char) GetBlueToothInput());
+    }
   }
   else {
     currentUser = RFIDCheck(1, currentUser);
@@ -221,12 +223,13 @@ long RFIDCheck(byte block, long userID){
     status = (MFRC522::StatusCode) mfrc522.MIFARE_Write(block,dataBlock, 16);
     if(status != MFRC522::STATUS_OK) {
       Serial.print("MIFARE_Write() failed: ");
-     Serial.println(mfrc522.GetStatusCodeName(status));
+      Serial.println(mfrc522.GetStatusCodeName(status));
     }
     Serial.println();
     UID = -1;
     UpdateLCD(0,1,"");
     UpdateLCD(0,0, "Sperre aktiv");
+    sessionTime = 0;
     for(int i = 0; i < 80; i++){
       digitalWrite(buzzer,HIGH);
       delay(1);
@@ -245,10 +248,10 @@ void CountTime(){
   sessionTime++;
   usageTime++;
   oldMillis = currentMillis;
-  Serial.print("sessionTime: ");
+  /*Serial.print("sessionTime: ");
   Serial.println(sessionTime);
   Serial.print("usageTime: ");
-  Serial.println(usageTime);
+  Serial.println(usageTime);*/
 }
 
 //Helper routine to dump a byte array as hex values to Serial.
@@ -268,20 +271,20 @@ void DumpByteArrayAsHex(byte *buffer, byte bufferSize) {
 void UpdateLCD(int pos, int line, char * text){
   lcd.setCursor(pos, line);
   lcd.print(text);
-  Serial.print("Text: ");
+  /*Serial.print("Text: ");
   Serial.println(text);
   Serial.print("Sizeof(text): ");
-  Serial.println(strlen(text));
+  Serial.println(strlen(text));*/
   for(int i = strlen(text); i < 16; i++){
     lcd.write(' ');
   }
 }
 
 char * TimeToString(unsigned long t, int type){
-  Serial.print("Type: ");
+  /*Serial.print("Type: ");
   Serial.print(type);
   Serial.print(" - Time: ");
-  Serial.println(t);
+  Serial.println(t);*/
   static char str[16];
   if(type == 0){
     int h = t / 3600;
@@ -301,5 +304,60 @@ char * TimeToString(unsigned long t, int type){
   }
   //sprintf(str, "%02d:%02d:%02d:%02d", d, h, m, s);
   //sprintf(str, "%04d:%02d:%02d", h, m, s);
+  delay(20);
   return str; 
+}
+
+byte GetBlueToothInput(){
+  byte blueToothValue;
+  blueToothValue = Serial.read();
+  return blueToothValue;
+}
+
+void Forward(){
+  //h-bridge forward
+}
+
+void Backward(){
+  //h-bridge backwards
+}
+
+void Left(){
+  //h-bridge left
+}
+
+void Right(){
+  //h-bridge right
+}
+
+void ForwardLeft(){
+  //h-bridge forward-left
+}
+
+void ForwardRight(){
+  //h-bridge forward-right
+}
+
+void BackwardLeft(){
+  //h-bridge backward-left
+}
+
+void BackwardRight(){
+  //h-bridge backward-right
+}
+
+void Stop(){
+  //h-bridge stop
+}
+
+void Horn(){
+  //horn on/off
+}
+
+void Speed(){
+  //h-bridge speed
+}
+
+void StopAll(){
+  //Stop All
 }
