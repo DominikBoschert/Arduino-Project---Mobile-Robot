@@ -2,13 +2,13 @@
 #include <MFRC522.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
-LiquidCrystal_I2C lcd(0x27, 16, 2); //Define Display
 
 //Define configurable pins
 #define RST_PIN 9
 #define SS_PIN 10
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);   //Create instance
+LiquidCrystal_I2C lcd(0x27, 16, 2); //Define Display
 
 //Variables
 MFRC522::MIFARE_Key key;
@@ -21,7 +21,13 @@ unsigned long oldMillis;
 unsigned long usageTime = 0;
 unsigned long sessionTime = 0;
 const unsigned long interval = 1000;
-int buzzer = 8;
+int buzzer = 2;
+int GSM1 = 6;
+int in1 = 7;
+int in2 = 8;
+int GSM2 = 5;
+int in3 = 3;
+int in4 = 4;
 
 //Init
 void setup(){
@@ -32,6 +38,12 @@ void setup(){
   UpdateLCD(0, 0, "Sperre aktiv");
   mfrc522.PCD_Init(); //Init MFRC522
   pinMode(buzzer, OUTPUT);
+  pinMode(GSM1, OUTPUT);
+  pinMode(GSM2, OUTPUT);
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
   currentUser = -1;
 
   //Create Key A and B (assuming default keys which are usually "0xFF 0xFF 0xFF 0xFF 0xFF 0xFF"
@@ -56,7 +68,46 @@ void loop() {
     }
     currentUser = RFIDCheck(4, currentUser);
     if(Serial.available()){
-      Serial.println((char) GetBlueToothInput());
+      //Serial.println((char) GetBlueToothInput());
+      switch((char) GetBlueToothInput()){
+        case 'F': Forward();
+          break;
+        case 'B': Backward();
+          break;
+        case 'L': Left();
+          break;
+        case 'R': Right();
+          break;
+        case 'S': Stop();
+          break;
+        case 'V': Horn();
+          break;
+        case 'v': Horn();
+          break;
+        case '1': Speed(1);
+          break;
+        case '2': Speed(2);
+          break;
+        case '3': Speed(3);
+          break;
+        case '4': Speed(4);
+          break;
+        case '5': Speed(5);
+          break;
+        case '6': Speed(6);
+          break;
+        case '7': Speed(7);
+          break;
+        case '8': Speed(8);
+          break;
+        case '9': Speed(9);
+          break;
+        case '0': Speed(10);
+          break;        
+      }
+      /*if((char) GetBlueToothInput() == 'V'){
+        Horn();
+      }*/
     }
   }
   else {
@@ -227,6 +278,7 @@ long RFIDCheck(byte block, long userID){
     }
     Serial.println();
     UID = -1;
+    StopAll();
     UpdateLCD(0,1,"");
     UpdateLCD(0,0, "Sperre aktiv");
     sessionTime = 0;
@@ -314,20 +366,48 @@ byte GetBlueToothInput(){
   return blueToothValue;
 }
 
+void Horn(){
+  for(int i = 0; i < 150; i++){
+      digitalWrite(buzzer,HIGH);
+      delay(1);
+      digitalWrite(buzzer,LOW);
+      delay(1);
+    }
+}
 void Forward(){
   //h-bridge forward
+  Serial.println("FORWARD!!");
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
 }
 
 void Backward(){
   //h-bridge backwards
+  Serial.println("BACKWARD!!");
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+  digitalWrite(in3, HIGH);
+  digitalWrite(in4, LOW);
 }
 
 void Left(){
   //h-bridge left
+  Serial.println("LEFT!!");
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
 }
 
 void Right(){
   //h-bridge right
+  Serial.println("RIGHT!!");
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
 }
 
 void ForwardLeft(){
@@ -348,16 +428,27 @@ void BackwardRight(){
 
 void Stop(){
   //h-bridge stop
+  Serial.println("STOP!!");
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
 }
 
-void Horn(){
-  //horn on/off
-}
-
-void Speed(){
+void Speed(double level){
   //h-bridge speed
+  Serial.println("Speeeeeeeeeeed!!!");
+  level = 255 *(level / 10);
+  Serial.println(level);
+  analogWrite(GSM1, (int) level);
+  analogWrite(GSM2, (int) level);
 }
 
 void StopAll(){
   //Stop All
+  Serial.println("STOP ALL!!");
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
 }
