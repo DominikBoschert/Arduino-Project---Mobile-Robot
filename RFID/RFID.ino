@@ -28,6 +28,7 @@ int in2 = 8;
 int GSM2 = 5;
 int in3 = 3;
 int in4 = 4;
+int currentSpeed = 1;
 
 //Init
 void setup(){
@@ -54,6 +55,7 @@ void setup(){
   Serial.print("Access Keys (A and B): ");
   DumpByteArrayAsHex(key.keyByte, MFRC522::MF_KEY_SIZE);
   Serial.println();
+  Speed();
 }
 
 void loop() {
@@ -64,7 +66,9 @@ void loop() {
       //Serial.println("DEBUG!!!!");
       CountTime();
       UpdateLCD(0, 0, TimeToString(sessionTime, 0));
+     //delay(20);
       UpdateLCD(0, 1, TimeToString(usageTime, 1));
+     // delay(20);
     }
     currentUser = RFIDCheck(4, currentUser);
     if(Serial.available()){
@@ -78,36 +82,51 @@ void loop() {
           break;
         case 'R': Right();
           break;
+        case 'G': ForwardLeft();
+          break;
+        case 'I': ForwardRight();
+          break;
+        case 'H': BackwardLeft();
+          break;
+        case 'J': BackwardRight();
+          break;
         case 'S': Stop();
           break;
         case 'V': Horn();
           break;
         case 'v': Horn();
           break;
-        case '1': Speed(1);
+        case '1': currentSpeed = 3;
+          Speed();
           break;
-        case '2': Speed(2);
+        case '2': currentSpeed = 3;
+          Speed();
           break;
-        case '3': Speed(3);
+        case '3': currentSpeed = 3;
+          Speed();
           break;
-        case '4': Speed(4);
+        case '4': currentSpeed = 4;
+          Speed();
           break;
-        case '5': Speed(5);
+        case '5': currentSpeed = 5;
+          Speed();
           break;
-        case '6': Speed(6);
+        case '6': currentSpeed = 6;
+        Speed();
           break;
-        case '7': Speed(7);
+        case '7': currentSpeed = 7;
+          Speed();
           break;
-        case '8': Speed(8);
+        case '8': currentSpeed = 8;
+          Speed();
           break;
-        case '9': Speed(9);
+        case '9': currentSpeed = 9;
+          Speed();
           break;
-        case '0': Speed(10);
+        case '0': currentSpeed = 10;
+          Speed();
           break;        
       }
-      /*if((char) GetBlueToothInput() == 'V'){
-        Horn();
-      }*/
     }
   }
   else {
@@ -377,6 +396,7 @@ void Horn(){
 void Forward(){
   //h-bridge forward
   Serial.println("FORWARD!!");
+  Speed();
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
   digitalWrite(in3, LOW);
@@ -386,6 +406,7 @@ void Forward(){
 void Backward(){
   //h-bridge backwards
   Serial.println("BACKWARD!!");
+  Speed();
   digitalWrite(in1, LOW);
   digitalWrite(in2, HIGH);
   digitalWrite(in3, HIGH);
@@ -395,6 +416,7 @@ void Backward(){
 void Left(){
   //h-bridge left
   Serial.println("LEFT!!");
+  Speed();
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
   digitalWrite(in3, LOW);
@@ -404,6 +426,7 @@ void Left(){
 void Right(){
   //h-bridge right
   Serial.println("RIGHT!!");
+  Speed();
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
   digitalWrite(in3, LOW);
@@ -412,18 +435,46 @@ void Right(){
 
 void ForwardLeft(){
   //h-bridge forward-left
+  Serial.println("FORWARD-LEFT!!");
+  double level = 255 *((double) currentSpeed / 10) / 2;
+  analogWrite(GSM1, (int) level);
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
 }
 
 void ForwardRight(){
   //h-bridge forward-right
+  Serial.println("FORWARD-RIGHT!!");
+  double level = 255 *((double) currentSpeed / 10) / 2;
+  analogWrite(GSM2, (int) level);
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, HIGH);
 }
 
 void BackwardLeft(){
   //h-bridge backward-left
+  Serial.println("BACKWARD-LEFT!!");
+  double level = 255 *((double) currentSpeed / 10) / 2;
+  analogWrite(GSM1, (int) level);
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+  digitalWrite(in3, HIGH);
+  digitalWrite(in4, LOW);
 }
 
 void BackwardRight(){
   //h-bridge backward-right
+  Serial.println("BACKWARD-RIGHT!!");
+  double level = 255 *((double) currentSpeed / 10) / 2;
+  analogWrite(GSM2, (int) level);
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+  digitalWrite(in3, HIGH);
+  digitalWrite(in4, LOW);
 }
 
 void Stop(){
@@ -435,10 +486,11 @@ void Stop(){
   digitalWrite(in4, LOW);
 }
 
-void Speed(double level){
+void Speed(){
   //h-bridge speed
   Serial.println("Speeeeeeeeeeed!!!");
-  level = 255 *(level / 10);
+  Serial.println(currentSpeed);
+  double level = 255 *((double) currentSpeed / 10);
   Serial.println(level);
   analogWrite(GSM1, (int) level);
   analogWrite(GSM2, (int) level);
