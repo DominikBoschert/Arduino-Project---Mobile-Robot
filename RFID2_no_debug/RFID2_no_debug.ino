@@ -52,18 +52,13 @@ void setup(){
   for(byte i = 0; i < 6; i++) {
     key.keyByte[i] = 0xFF;
   }
-
-  Serial.print("Access Keys (A and B): ");
-  DumpByteArrayAsHex(key.keyByte, MFRC522::MF_KEY_SIZE);
-  Serial.println();
   
   Speed();
 }
 
 void loop() {
-  //if a user is authenticated
+  //If a user is authenticated
   if(currentUser == 0 || currentUser == 1){
-    //Serial.print(currentUser);
     currentMillis = millis();
     if(currentMillis - oldMillis >= interval){
       CountTime();
@@ -72,7 +67,6 @@ void loop() {
     }
     currentUser = RFIDCheck(currentUser);
     if(Serial.available()){
-      //Serial.println((char) GetBlueToothInput());
       switch((char) GetBlueToothInput()){
         case 'F': Forward();
           break;
@@ -129,11 +123,10 @@ void loop() {
       }
     }
   }
-  //if there is no authenticated user
+  //If there is no authenticated user
   else {
     currentUser = RFIDCheck(currentUser);
     if(currentUser >= 0 && currentUser <= 1){
-      Serial.println(usageTime);
       currentMillis = millis();
       oldMillis = currentMillis;
       UpdateLCD(0, 0, TimeToString(sessionTime, 0));
@@ -171,20 +164,11 @@ long RFIDCheck(long userID){
   if(!RFIDAuth(3)){
     return userID;
   }
+
   //Ty to read data from block 1 (block 1 is set up to contain our user ID) 
   if(!RFIDRead(1,  buffer, size)){
     return userID;
   }
-
-  
-  /*Serial.print("Data in block 1");
-  DumpByteArrayAsChar(buffer, 16);
-  Serial.println();
-  Serial.println();
-  Serial.print("UID: ");
-  Serial.println(UID);
-  Serial.print("userID: ");
-  Serial.println(userID);*/
 
   //if there is currently no authenticated user and the lock is active
   if(UID == -1){
@@ -192,9 +176,6 @@ long RFIDCheck(long userID){
     if(!RFIDCheckUserList(buffer, &UID)){
       return userID;
     }
-    
-    /*Serial.print("NEW UID: ");
-    Serial.println(UID);*/
     
     //Try to authenticate with the PICC for sector 1
     if(!RFIDAuth(7)){
@@ -206,14 +187,7 @@ long RFIDCheck(long userID){
       return userID;
     }
 
-    /*Serial.println("Data in block 4");
-    DumpByteArrayAsHex(buffer, 16);
-    Serial.println();*/
-
     usageTime = (unsigned long) *buffer; //convert the read usage time to unsigned long and store it in the global variable
-    /*Serial.print("usageTime: ");
-    Serial.println(usageTime);
-    Serial.println();*/
 
     BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
   }
@@ -240,19 +214,12 @@ long RFIDCheck(long userID){
 }
 
 boolean RFIDCheckPICCType(){
-  //Show some details of the PICC
-  /*Serial.print("Card UID: ");
-  DumpByteArrayAsHex(mfrc522.uid.uidByte, mfrc522.uid.size);
-  Serial.println();
-  Serial.print("PICC type: ");*/
   //Get PICC type and check if it's compatible with our PCD
   MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-  Serial.println(mfrc522.PICC_GetTypeName(piccType));
 
   if(piccType != MFRC522::PICC_TYPE_MIFARE_MINI
                 &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
                 &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K){
-    Serial.println("This script only works with MIFARE Classic.");
     return false;
   }
   return true;
@@ -261,11 +228,8 @@ boolean RFIDCheckPICCType(){
 boolean RFIDAuth(byte trailerBlock){
   //Try to authenticate with the "A" key
   MFRC522::StatusCode status;
-  Serial.println("Authenticating using key A...");
   status = (MFRC522::StatusCode) mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key, &(mfrc522.uid));
   if(status != MFRC522::STATUS_OK){
-    Serial.print("PCD_Authenticate() failed: ");
-    Serial.println(mfrc522.GetStatusCodeName(status));
     return false;
   }
   return true;
@@ -273,13 +237,9 @@ boolean RFIDAuth(byte trailerBlock){
 
 boolean RFIDRead(byte block, byte *bufferAdr, byte size){
   //Try to read the data from the block
-  /*Serial.print("Reading data from block ");
-  Serial.println(block);*/
   MFRC522::StatusCode status;
   status = (MFRC522::StatusCode) mfrc522.MIFARE_Read(block, bufferAdr, &size);
   if(status != MFRC522::STATUS_OK) {
-    Serial.print("MIFARE_Read() failed: ");
-    Serial.println(mfrc522.GetStatusCodeName(status));
     return false;
   }    
   return true;
@@ -289,19 +249,10 @@ boolean RFIDWrite(byte block){
   //Try to write usageTime to PICC
   byte dataBlock[16] = {usageTime};
   MFRC522::StatusCode status;
-  /*Serial.print("Writing data to block ");
-  Serial.println(block);
-  DumpByteArrayAsHex(dataBlock, 16);
-  Serial.println();
-  DumpByteArrayAsChar(dataBlock, 16);
-  Serial.println();*/
   status = (MFRC522::StatusCode) mfrc522.MIFARE_Write(block,dataBlock, 16);
   if(status != MFRC522::STATUS_OK) {
-    Serial.print("MIFARE_Write() failed: ");
-    Serial.println(mfrc522.GetStatusCodeName(status));
     return false;
   }
-  Serial.println();
   return true;
 }
 
@@ -309,34 +260,17 @@ boolean RFIDCheckUserList(byte bufferCpy[18], long *UIDAdr){
   //Check the given byte array against the byte arrays in userList until a match is found or there are no new byte arrays left in userList
   byte count = 0;
   for(byte user = 0; user < 2; user++){
-    /*Serial.print("Checking against user ");
-    Serial.println(user);
-    DumpByteArrayAsChar(userList[user], 16);
-    Serial.println();
-    DumpByteArrayAsHex(userList[user], 16);
-    Serial.println();
-    Serial.println("buffer:");
-    DumpByteArrayAsChar(bufferCpy, 16);
-    Serial.println();
-    DumpByteArrayAsHex(bufferCpy, 16);
-    Serial.println();
-    Serial.println();*/
     for (byte i = 0; i < 16; i++) {
       if (bufferCpy[i] == userList[user][i]){
         count++;
       }
-    }/*
-    Serial.print("Number of bytes that match = ");
-    Serial.print(count);*/
+    }
     if (count == 16) {
-      Serial.println(" Success");
       *UIDAdr = user;
       return true;
     }
-    Serial.println();
     count = 0; //Reset count of matching bytes after each byte array
   }
-  Serial.println("No match");
   return false;
 }
 
@@ -352,36 +286,12 @@ void CountTime(){
   sessionTime++;
   usageTime++;
   oldMillis = currentMillis;
-  /*Serial.print("sessionTime: ");
-  Serial.println(sessionTime);
-  Serial.print("usageTime: ");
-  Serial.println(usageTime);*/
-}
-
-//Helper function to dump a byte array as char values to Serial.
-void DumpByteArrayAsChar(byte *buffer, byte bufferSize) {
-  for(byte i = 0; i < bufferSize; i++){
-    Serial.print((char) buffer[i]);
-  }
-}
-
-
-//Helper function to dump a byte array as char values to Serial.
-void DumpByteArrayAsHex(byte *buffer, byte bufferSize) {
-  for(byte i = 0; i < bufferSize; i++){
-    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
-    Serial.print(buffer[i], HEX);
-  }
 }
 
 void UpdateLCD(int pos, int line, char * text){
   //Updates the LCD at the given position, line and with the given text out of the char array
   lcd.setCursor(pos, line);
   lcd.print(text);
-  /*Serial.print("Text: ");
-  Serial.println(text);
-  Serial.print("Sizeof(text): ");
-  Serial.println(strlen(text));*/
   //If the char array has less than 16 characters, fill the following position with spaces to overwrite leftover characters from the old text
   for(int i = strlen(text); i < 16; i++){
     lcd.write(' ');
@@ -389,10 +299,6 @@ void UpdateLCD(int pos, int line, char * text){
 }
 
 char * TimeToString(unsigned long t, int type){
-  /*Serial.print("Type: ");
-  Serial.print(type);
-  Serial.print(" - Time: ");
-  Serial.println(t);*/
   /*Format the given time into the given type of output 
     type 0 = hhhh:mm:ss
     type 1 = dd Tage hh:mm:ss*/
@@ -413,8 +319,6 @@ char * TimeToString(unsigned long t, int type){
     int s = t % 60;
     sprintf(str, "%02d Tage %02d:%02d:%02d", d, h, m, s);
   }
-  //sprintf(str, "%02d:%02d:%02d:%02d", d, h, m, s);
-  //sprintf(str, "%04d:%02d:%02d", h, m, s);
   delay(20); //Delay to ensure the LCD has finished writing. LCD output will be bugged if this isn't done. 
   return str; 
 }
@@ -441,10 +345,8 @@ void Horn(){
   BuzzerSignal(150, 1);
 }
 
-
 //These functions control the H-bridge and motors via switching different pins between high and low
 void Forward(){
-  Serial.println("FORWARD!!");
   Speed();
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -453,7 +355,6 @@ void Forward(){
 }
 
 void Backward(){
-  Serial.println("BACKWARD!!");
   Speed();
   digitalWrite(in1, LOW);
   digitalWrite(in2, HIGH);
@@ -462,7 +363,6 @@ void Backward(){
 }
 
 void Left(){
-  Serial.println("LEFT!!");
   Speed();
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
@@ -471,7 +371,6 @@ void Left(){
 }
 
 void Right(){
-  Serial.println("RIGHT!!");
   Speed();
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -481,7 +380,6 @@ void Right(){
 
 void ForwardLeft(){
   //Put one motor on 50% of the speed of the other to be able to drive curves
-  Serial.println("FORWARD-LEFT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
   digitalWrite(in1, HIGH);
@@ -492,7 +390,6 @@ void ForwardLeft(){
 
 void ForwardRight(){
   //Put one motor on 50% of the speed of the other to be able to drive curves
-  Serial.println("FORWARD-RIGHT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
   digitalWrite(in1, HIGH);
@@ -503,7 +400,6 @@ void ForwardRight(){
 
 void BackwardLeft(){
   //Put one motor on 50% of the speed of the other to be able to drive curves
-  Serial.println("BACKWARD-LEFT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
   digitalWrite(in1, LOW);
@@ -514,7 +410,6 @@ void BackwardLeft(){
 
 void BackwardRight(){
   //Put one motor on 50% of the speed of the other to be able to drive curves
-  Serial.println("BACKWARD-RIGHT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
   digitalWrite(in1, LOW);
@@ -525,7 +420,6 @@ void BackwardRight(){
 
 void Stop(){
   //Stop motors
-  Serial.println("STOP!!");
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
   digitalWrite(in3, LOW);
@@ -534,10 +428,7 @@ void Stop(){
 
 void Speed(){
   //Set the speed of the motors via 8 bit number (NOTE: motors seem to be too weak to spin the wheels below 75
-  Serial.println("Speeeeeeeeeeed!!!");
-  Serial.println(currentSpeed);
   double level = 200 *((double) currentSpeed / 10) + 50;
-  Serial.println(level);
   analogWrite(GSM1, (int) level);
   analogWrite(GSM2, (int) level);
 }
