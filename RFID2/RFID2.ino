@@ -20,15 +20,16 @@ MFRC522::MIFARE_Key key;  //Variable for RFID key
 LiquidCrystal_I2C lcd(0x27, 16, 2); //Create instance for Display
 const unsigned long interval = 1000;
 
+byte userList[1][16] = {
+  {"This is a test"}
+};
+
 unsigned long currentMillis;
 unsigned long oldMillis;
 unsigned long usageTime = 0;
 unsigned long sessionTime = 0;
 
-int currentUser;
-byte userList[1][16] = {
-  {"This is a test"}
-};
+int currentUser = -1; //-1 for no authenticated user - Lock is active
 int currentSpeed = 1;
 
 //Init
@@ -37,8 +38,9 @@ void setup(){
   SPI.begin();        //Init SPI
   lcd.init();         //Init LCD
   lcd.backlight();    //Turn on Backlight
-  UpdateLCD(0, 0, "Sperre aktiv");
   mfrc522.PCD_Init(); //Init MFRC522
+  UpdateLCD(0, 0, "Sperre aktiv");
+  
   pinMode(buzzer, OUTPUT);
   pinMode(GSM1, OUTPUT);
   pinMode(GSM2, OUTPUT);
@@ -46,7 +48,6 @@ void setup(){
   pinMode(in2, OUTPUT);
   pinMode(in3, OUTPUT);
   pinMode(in4, OUTPUT);
-  currentUser = -1; //-1 for no authenticated user - Lock is active
 
   //Create Key A and B (assuming default keys which are usually "0xFF 0xFF 0xFF 0xFF 0xFF 0xFF"
   for(byte i = 0; i < 6; i++) {
@@ -92,9 +93,9 @@ void loop() {
           break;
         case 'S': Stop();
           break;
-        case 'V': Horn();
+        case 'V': BuzzerSignal(150, 1);
           break;
-        case 'v': Horn();
+        case 'v': BuzzerSignal(150, 1);
           break;
         case '1': currentSpeed = 3;
           Speed();
@@ -143,7 +144,7 @@ void loop() {
 }
 
 //Checks if a PICC is in range and tries to ommunicate with it to authenticate a user
-long RFIDCheck(long userID){
+int RFIDCheck(int userID){
   //Checks if a new PICC is in range
   if(!mfrc522.PICC_IsNewCardPresent()){
     return userID;
@@ -165,7 +166,7 @@ long RFIDCheck(long userID){
   byte size = sizeof(buffer);
   //Temporary variable, stores the user ID/index if one is succesfully authenticated, needed because the RFIDCheck
   //can still fail after successful authentication which will then return the origial ID (variable userID)
-  long UID = userID;
+  int UID = userID;
 
   //Try to authenticate with the PICC for sector 0
   if(!RFIDAuth(3)){
@@ -187,7 +188,7 @@ long RFIDCheck(long userID){
   Serial.println(userID);*/
 
   //if there is currently no authenticated user and the lock is active
-  if(UID == -1){
+  if(userID == -1){
   //Check if read data matches a user
     if(!RFIDCheckUserList(buffer, &UID)){
       return userID;
@@ -287,8 +288,8 @@ boolean RFIDRead(byte block, byte *bufferAdr, byte size){
 
 boolean RFIDWrite(byte block){
   //Try to write usageTime to PICC
-  byte dataBlock[16] = {usageTime};
   MFRC522::StatusCode status;
+  byte dataBlock[16] = {usageTime};
   /*Serial.print("Writing data to block ");
   Serial.println(block);
   DumpByteArrayAsHex(dataBlock, 16);
@@ -305,7 +306,7 @@ boolean RFIDWrite(byte block){
   return true;
 }
 
-boolean RFIDCheckUserList(byte bufferCpy[18], long *UIDAdr){
+boolean RFIDCheckUserList(byte bufferCpy[18], int *UIDAdr){
   //Check the given byte array against the byte arrays in userList until a match is found or there are no new byte arrays left in userList
   byte count = 0;
   for(byte user = 0; user < 2; user++){
@@ -413,8 +414,6 @@ char * TimeToString(unsigned long t, int type){
     int s = t % 60;
     sprintf(str, "%02d Tage %02d:%02d:%02d", d, h, m, s);
   }
-  //sprintf(str, "%02d:%02d:%02d:%02d", d, h, m, s);
-  //sprintf(str, "%04d:%02d:%02d", h, m, s);
   delay(20); //Delay to ensure the LCD has finished writing. LCD output will be bugged if this isn't done. 
   return str; 
 }
@@ -436,13 +435,26 @@ void BuzzerSignal(int duration, int customDelay){
   }
 }
 
-void Horn(){
-  //meep, meep?
-  BuzzerSignal(150, 1);
+//These functions control the H-bridge and motors via switching different pins between high and low
+void Speed(){
+  //Set the speed of the motors via 8 bit number (NOTE: motors seem to be too weak to spin the wheels below 75
+  Serial.println("Speeeeeeeeeeed!!!");
+  Serial.println(currentSpeed);
+  double level = 200 *((double) currentSpeed / 10) + 50;
+  Serial.println(level);
+  analogWrite(GSM1, (int) level);
+  analogWrite(GSM2, (int) level);
 }
 
+void Stop(){
+  //Stop motors
+  Serial.println("STOP!!");
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+}
 
-//These functions control the H-bridge and motors via switching different pins between high and low
 void Forward(){
   Serial.println("FORWARD!!");
   Speed();
@@ -480,7 +492,7 @@ void Right(){
 }
 
 void ForwardLeft(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to be able to turn while keeping forward acceleration
   Serial.println("FORWARD-LEFT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
@@ -491,7 +503,7 @@ void ForwardLeft(){
 }
 
 void ForwardRight(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to turn while keeping forward acceleration
   Serial.println("FORWARD-RIGHT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
@@ -502,7 +514,7 @@ void ForwardRight(){
 }
 
 void BackwardLeft(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to turn while keeping backward acceleration
   Serial.println("BACKWARD-LEFT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
@@ -513,7 +525,7 @@ void BackwardLeft(){
 }
 
 void BackwardRight(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to turn while keeping backward acceleration
   Serial.println("BACKWARD-RIGHT!!");
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
@@ -521,23 +533,4 @@ void BackwardRight(){
   digitalWrite(in2, HIGH);
   digitalWrite(in3, HIGH);
   digitalWrite(in4, LOW);
-}
-
-void Stop(){
-  //Stop motors
-  Serial.println("STOP!!");
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, LOW);
-  digitalWrite(in3, LOW);
-  digitalWrite(in4, LOW);
-}
-
-void Speed(){
-  //Set the speed of the motors via 8 bit number (NOTE: motors seem to be too weak to spin the wheels below 75
-  Serial.println("Speeeeeeeeeeed!!!");
-  Serial.println(currentSpeed);
-  double level = 200 *((double) currentSpeed / 10) + 50;
-  Serial.println(level);
-  analogWrite(GSM1, (int) level);
-  analogWrite(GSM2, (int) level);
 }

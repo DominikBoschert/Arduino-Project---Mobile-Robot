@@ -20,15 +20,16 @@ MFRC522::MIFARE_Key key;  //Variable for RFID key
 LiquidCrystal_I2C lcd(0x27, 16, 2); //Create instance for Display
 const unsigned long interval = 1000;
 
+byte userList[1][16] = {
+  {"This is a test"}
+};
+
 unsigned long currentMillis;
 unsigned long oldMillis;
 unsigned long usageTime = 0;
 unsigned long sessionTime = 0;
 
-int currentUser;
-byte userList[1][16] = {
-  {"This is a test"}
-};
+int currentUser = -1; //-1 for no authenticated user - Lock is active
 int currentSpeed = 1;
 
 //Init
@@ -37,8 +38,9 @@ void setup(){
   SPI.begin();        //Init SPI
   lcd.init();         //Init LCD
   lcd.backlight();    //Turn on Backlight
-  UpdateLCD(0, 0, "Sperre aktiv");
   mfrc522.PCD_Init(); //Init MFRC522
+  UpdateLCD(0, 0, "Sperre aktiv");
+  
   pinMode(buzzer, OUTPUT);
   pinMode(GSM1, OUTPUT);
   pinMode(GSM2, OUTPUT);
@@ -46,7 +48,6 @@ void setup(){
   pinMode(in2, OUTPUT);
   pinMode(in3, OUTPUT);
   pinMode(in4, OUTPUT);
-  currentUser = -1; //-1 for no authenticated user - Lock is active
 
   //Create Key A and B (assuming default keys which are usually "0xFF 0xFF 0xFF 0xFF 0xFF 0xFF"
   for(byte i = 0; i < 6; i++) {
@@ -86,9 +87,9 @@ void loop() {
           break;
         case 'S': Stop();
           break;
-        case 'V': Horn();
+        case 'V': BuzzerSignal(150, 1);
           break;
-        case 'v': Horn();
+        case 'v': BuzzerSignal(150, 1);
           break;
         case '1': currentSpeed = 3;
           Speed();
@@ -136,7 +137,7 @@ void loop() {
 }
 
 //Checks if a PICC is in range and tries to ommunicate with it to authenticate a user
-long RFIDCheck(long userID){
+int RFIDCheck(int userID){
   //Checks if a new PICC is in range
   if(!mfrc522.PICC_IsNewCardPresent()){
     return userID;
@@ -158,20 +159,20 @@ long RFIDCheck(long userID){
   byte size = sizeof(buffer);
   //Temporary variable, stores the user ID/index if one is succesfully authenticated, needed because the RFIDCheck
   //can still fail after successful authentication which will then return the origial ID (variable userID)
-  long UID = userID;
+  int UID = userID;
 
   //Try to authenticate with the PICC for sector 0
   if(!RFIDAuth(3)){
     return userID;
   }
-
+  
   //Ty to read data from block 1 (block 1 is set up to contain our user ID) 
   if(!RFIDRead(1,  buffer, size)){
     return userID;
   }
 
   //if there is currently no authenticated user and the lock is active
-  if(UID == -1){
+  if(userID == -1){
   //Check if read data matches a user
     if(!RFIDCheckUserList(buffer, &UID)){
       return userID;
@@ -186,9 +187,8 @@ long RFIDCheck(long userID){
     if(!RFIDRead(4, buffer, size)){
       return userID;
     }
-
+    
     usageTime = (unsigned long) *buffer; //convert the read usage time to unsigned long and store it in the global variable
-
     BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
   }
   else{
@@ -216,7 +216,6 @@ long RFIDCheck(long userID){
 boolean RFIDCheckPICCType(){
   //Get PICC type and check if it's compatible with our PCD
   MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-
   if(piccType != MFRC522::PICC_TYPE_MIFARE_MINI
                 &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
                 &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K){
@@ -247,8 +246,8 @@ boolean RFIDRead(byte block, byte *bufferAdr, byte size){
 
 boolean RFIDWrite(byte block){
   //Try to write usageTime to PICC
-  byte dataBlock[16] = {usageTime};
   MFRC522::StatusCode status;
+  byte dataBlock[16] = {usageTime};
   status = (MFRC522::StatusCode) mfrc522.MIFARE_Write(block,dataBlock, 16);
   if(status != MFRC522::STATUS_OK) {
     return false;
@@ -256,7 +255,7 @@ boolean RFIDWrite(byte block){
   return true;
 }
 
-boolean RFIDCheckUserList(byte bufferCpy[18], long *UIDAdr){
+boolean RFIDCheckUserList(byte bufferCpy[18], int *UIDAdr){
   //Check the given byte array against the byte arrays in userList until a match is found or there are no new byte arrays left in userList
   byte count = 0;
   for(byte user = 0; user < 2; user++){
@@ -299,9 +298,6 @@ void UpdateLCD(int pos, int line, char * text){
 }
 
 char * TimeToString(unsigned long t, int type){
-  /*Format the given time into the given type of output 
-    type 0 = hhhh:mm:ss
-    type 1 = dd Tage hh:mm:ss*/
   char str[16];
   if(type == 0){
     int h = t / 3600;
@@ -340,12 +336,22 @@ void BuzzerSignal(int duration, int customDelay){
   }
 }
 
-void Horn(){
-  //meep, meep?
-  BuzzerSignal(150, 1);
+//These functions control the H-bridge and motors via switching different pins between high and low
+void Speed(){
+  //Set the speed of the motors via 8 bit number (NOTE: motors seem to be too weak to spin the wheels below 75
+  double level = 200 *((double) currentSpeed / 10) + 50;
+  analogWrite(GSM1, (int) level);
+  analogWrite(GSM2, (int) level);
 }
 
-//These functions control the H-bridge and motors via switching different pins between high and low
+void Stop(){
+  //Stop motors
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  digitalWrite(in3, LOW);
+  digitalWrite(in4, LOW);
+}
+
 void Forward(){
   Speed();
   digitalWrite(in1, HIGH);
@@ -379,7 +385,7 @@ void Right(){
 }
 
 void ForwardLeft(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to be able to turn while keeping forward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
   digitalWrite(in1, HIGH);
@@ -389,7 +395,7 @@ void ForwardLeft(){
 }
 
 void ForwardRight(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to be able to turn while keeping forward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
   digitalWrite(in1, HIGH);
@@ -399,7 +405,7 @@ void ForwardRight(){
 }
 
 void BackwardLeft(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to be able to turn while keeping backward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
   digitalWrite(in1, LOW);
@@ -409,26 +415,11 @@ void BackwardLeft(){
 }
 
 void BackwardRight(){
-  //Put one motor on 50% of the speed of the other to be able to drive curves
+  //Put one motor on 50% of the speed of the other to be able to turn while keeping backward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
   digitalWrite(in1, LOW);
   digitalWrite(in2, HIGH);
   digitalWrite(in3, HIGH);
   digitalWrite(in4, LOW);
-}
-
-void Stop(){
-  //Stop motors
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, LOW);
-  digitalWrite(in3, LOW);
-  digitalWrite(in4, LOW);
-}
-
-void Speed(){
-  //Set the speed of the motors via 8 bit number (NOTE: motors seem to be too weak to spin the wheels below 75
-  double level = 200 *((double) currentSpeed / 10) + 50;
-  analogWrite(GSM1, (int) level);
-  analogWrite(GSM2, (int) level);
 }
