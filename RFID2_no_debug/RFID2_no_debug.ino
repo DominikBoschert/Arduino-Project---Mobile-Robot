@@ -59,12 +59,13 @@ void setup(){
 
 void loop() {
   //If a user is authenticated
+  char LCDtext[16];
   if(currentUser == 0 || currentUser == 1){
     currentMillis = millis();
     if(currentMillis - oldMillis >= interval){
       CountTime();
-      UpdateLCD(0, 0, TimeToString(sessionTime, 0));
-      UpdateLCD(0, 1, TimeToString(usageTime, 1));
+      UpdateLCD(0, 0, TimeToString(LCDtext, sessionTime, 0));
+      UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
     }
     currentUser = RFIDCheck(currentUser);
     if(Serial.available()){
@@ -130,8 +131,8 @@ void loop() {
     if(currentUser >= 0 && currentUser <= 1){
       currentMillis = millis();
       oldMillis = currentMillis;
-      UpdateLCD(0, 0, TimeToString(sessionTime, 0));
-      UpdateLCD(0, 1, TimeToString(usageTime, 1));
+      UpdateLCD(0, 0, TimeToString(LCDtext, sessionTime, 0));
+      UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
     }
   }
 }
@@ -297,14 +298,13 @@ void UpdateLCD(int pos, int line, char * text){
   }
 }
 
-char * TimeToString(unsigned long t, int type){
-  char str[16];
+char * TimeToString(char *textVar, unsigned long t, int type){
   if(type == 0){
     int h = t / 3600;
     t = t % 3600;
     int m = t/60;
     int s = t % 60;
-    sprintf(str, "%04d:%02d:%02d", h, m, s);
+    sprintf(textVar, "%04d:%02d:%02d", h, m, s);
   }
   else if(type == 1){
     int d = t / 86400;
@@ -313,10 +313,10 @@ char * TimeToString(unsigned long t, int type){
     t = t % 3600;
     int m = t/60;
     int s = t % 60;
-    sprintf(str, "%02d Tage %02d:%02d:%02d", d, h, m, s);
+    sprintf(textVar, "%02d Tage %02d:%02d:%02d", d, h, m, s);
   }
   delay(20); //Delay to ensure the LCD has finished writing. LCD output will be bugged if this isn't done. 
-  return str; 
+  return textVar; 
 }
 
 byte GetBlueToothInput(){

@@ -63,15 +63,17 @@ void setup(){
 
 void loop() {
   //if a user is authenticated
+  char LCDtext[16];
   if(currentUser == 0 || currentUser == 1){
     //Serial.print(currentUser);
     currentMillis = millis();
     if(currentMillis - oldMillis >= interval){
       CountTime();
-      UpdateLCD(0, 0, TimeToString(sessionTime, 0));
-      UpdateLCD(0, 1, TimeToString(usageTime, 1));
+      UpdateLCD(0, 0, TimeToString(LCDtext, sessionTime, 0));
+      UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
     }
     currentUser = RFIDCheck(currentUser);
+    boolean activeInput = false;
     if(Serial.available()){
       //Serial.println((char) GetBlueToothInput());
       switch((char) GetBlueToothInput()){
@@ -137,8 +139,8 @@ void loop() {
       Serial.println(usageTime);
       currentMillis = millis();
       oldMillis = currentMillis;
-      UpdateLCD(0, 0, TimeToString(sessionTime, 0));
-      UpdateLCD(0, 1, TimeToString(usageTime, 1));
+      UpdateLCD(0, 0, TimeToString(LCDtext, sessionTime, 0));
+      UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
     }
   }
 }
@@ -167,7 +169,6 @@ int RFIDCheck(int userID){
   //Temporary variable, stores the user ID/index if one is succesfully authenticated, needed because the RFIDCheck
   //can still fail after successful authentication which will then return the origial ID (variable userID)
   int UID = userID;
-
   //Try to authenticate with the PICC for sector 0
   if(!RFIDAuth(3)){
     return userID;
@@ -176,7 +177,6 @@ int RFIDCheck(int userID){
   if(!RFIDRead(1,  buffer, size)){
     return userID;
   }
-
   
   /*Serial.print("Data in block 1");
   DumpByteArrayAsChar(buffer, 16);
@@ -389,7 +389,7 @@ void UpdateLCD(int pos, int line, char * text){
   }
 }
 
-char * TimeToString(unsigned long t, int type){
+char * TimeToString(char *textVar, unsigned long t, int type){
   /*Serial.print("Type: ");
   Serial.print(type);
   Serial.print(" - Time: ");
@@ -397,13 +397,12 @@ char * TimeToString(unsigned long t, int type){
   /*Format the given time into the given type of output 
     type 0 = hhhh:mm:ss
     type 1 = dd Tage hh:mm:ss*/
-  char str[16];
   if(type == 0){
     int h = t / 3600;
     t = t % 3600;
     int m = t/60;
     int s = t % 60;
-    sprintf(str, "%04d:%02d:%02d", h, m, s);
+    sprintf(textVar, "%04d:%02d:%02d", h, m, s);
   }
   else if(type == 1){
     int d = t / 86400;
@@ -412,10 +411,11 @@ char * TimeToString(unsigned long t, int type){
     t = t % 3600;
     int m = t/60;
     int s = t % 60;
-    sprintf(str, "%02d Tage %02d:%02d:%02d", d, h, m, s);
+    sprintf(textVar, "%02d Tage %02d:%02d:%02d", d, h, m, s);
   }
+  
   delay(20); //Delay to ensure the LCD has finished writing. LCD output will be bugged if this isn't done. 
-  return str; 
+  return textVar; 
 }
 
 byte GetBlueToothInput(){
