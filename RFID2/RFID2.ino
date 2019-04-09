@@ -1,3 +1,5 @@
+/* This sketch uses the SPI, Wire, LiquidCrystal_I2C, MFRC522 libraries which can all be found in the Arduino Library Manager
+   Author: Dominik Boschert, Moritz Sauer */
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Wire.h>
@@ -76,60 +78,7 @@ void loop() {
     boolean activeInput = false;
     if(Serial.available()){
       //Serial.println((char) GetBlueToothInput());
-      switch((char) GetBlueToothInput()){
-        case 'F': Forward();
-          break;
-        case 'B': Backward();
-          break;
-        case 'L': Left();
-          break;
-        case 'R': Right();
-          break;
-        case 'G': ForwardLeft();
-          break;
-        case 'I': ForwardRight();
-          break;
-        case 'H': BackwardLeft();
-          break;
-        case 'J': BackwardRight();
-          break;
-        case 'S': Stop();
-          break;
-        case 'V': BuzzerSignal(150, 1);
-          break;
-        case 'v': BuzzerSignal(150, 1);
-          break;
-        case '1': currentSpeed = 3;
-          Speed();
-          break;
-        case '2': currentSpeed = 3;
-          Speed();
-          break;
-        case '3': currentSpeed = 3;
-          Speed();
-          break;
-        case '4': currentSpeed = 4;
-          Speed();
-          break;
-        case '5': currentSpeed = 5;
-          Speed();
-          break;
-        case '6': currentSpeed = 6;
-        Speed();
-          break;
-        case '7': currentSpeed = 7;
-          Speed();
-          break;
-        case '8': currentSpeed = 8;
-          Speed();
-          break;
-        case '9': currentSpeed = 9;
-          Speed();
-          break;
-        case '0': currentSpeed = 10;
-          Speed();
-          break;        
-      }
+      EvaluateBlueToothInput();
     }
   }
   //if there is no authenticated user
@@ -151,6 +100,8 @@ int RFIDCheck(int userID){
   if(!mfrc522.PICC_IsNewCardPresent()){
     return userID;
   }
+
+
 
   //Try to get the uid of the PICC
   if(!mfrc522.PICC_ReadCardSerial()){
@@ -219,6 +170,19 @@ int RFIDCheck(int userID){
     BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
   }
   else{
+    int tmpUID;
+    
+    //Check if read data matches a user
+    if(!RFIDCheckUserList(buffer, &tmpUID)){
+      return userID;
+    }
+
+    if(tmpUID != UID){
+      RFIDStopConnection();
+      AuthFailedBuzzer();
+      return userID;
+    }
+    
     //Try to authenticate with the PICC for sector 1
     if(!RFIDAuth(7)){
       return userID;
@@ -254,6 +218,8 @@ boolean RFIDCheckPICCType(){
                 &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
                 &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K){
     Serial.println("This script only works with MIFARE Classic.");
+    AuthFailedBuzzer();
+    RFIDStopConnection();
     return false;
   }
   return true;
@@ -267,6 +233,8 @@ boolean RFIDAuth(byte trailerBlock){
   if(status != MFRC522::STATUS_OK){
     Serial.print("PCD_Authenticate() failed: ");
     Serial.println(mfrc522.GetStatusCodeName(status));
+    AuthFailedBuzzer();
+    RFIDStopConnection();
     return false;
   }
   return true;
@@ -281,6 +249,8 @@ boolean RFIDRead(byte block, byte *bufferAdr, byte size){
   if(status != MFRC522::STATUS_OK) {
     Serial.print("MIFARE_Read() failed: ");
     Serial.println(mfrc522.GetStatusCodeName(status));
+    AuthFailedBuzzer();
+    RFIDStopConnection();
     return false;
   }    
   return true;
@@ -300,6 +270,8 @@ boolean RFIDWrite(byte block){
   if(status != MFRC522::STATUS_OK) {
     Serial.print("MIFARE_Write() failed: ");
     Serial.println(mfrc522.GetStatusCodeName(status));
+    AuthFailedBuzzer();
+    RFIDStopConnection();
     return false;
   }
   Serial.println();
@@ -338,6 +310,8 @@ boolean RFIDCheckUserList(byte bufferCpy[18], int *UIDAdr){
     count = 0; //Reset count of matching bytes after each byte array
   }
   Serial.println("No match");
+  AuthFailedBuzzer();
+  RFIDStopConnection();
   return false;
 }
 
@@ -346,6 +320,64 @@ void RFIDStopConnection(){
   mfrc522.PICC_HaltA();
   //Leave "authenticated" state on the PCD, if this is not done there cannot be another connection
   mfrc522.PCD_StopCrypto1();
+}
+
+void EvaluateBlueToothInput(){
+  Serial.println("Evaluation");
+  switch((char) GetBlueToothInput()){
+        case 'F': Forward();
+          break;
+        case 'B': Backward();
+          break;
+        case 'L': Left();
+          break;
+        case 'R': Right();
+          break;
+        case 'G': ForwardLeft();
+          break;
+        case 'I': ForwardRight();
+          break;
+        case 'H': BackwardLeft();
+          break;
+        case 'J': BackwardRight();
+          break;
+        case 'S': Stop();
+          break;
+        case 'V': BuzzerSignal(150, 1);
+          break;
+        case 'v': BuzzerSignal(150, 1);
+          break;
+        case '1': currentSpeed = 3;
+          Speed();
+          break;
+        case '2': currentSpeed = 3;
+          Speed();
+          break;
+        case '3': currentSpeed = 3;
+          Speed();
+          break;
+        case '4': currentSpeed = 4;
+          Speed();
+          break;
+        case '5': currentSpeed = 5;
+          Speed();
+          break;
+        case '6': currentSpeed = 6;
+        Speed();
+          break;
+        case '7': currentSpeed = 7;
+          Speed();
+          break;
+        case '8': currentSpeed = 8;
+          Speed();
+          break;
+        case '9': currentSpeed = 9;
+          Speed();
+          break;
+        case '0': currentSpeed = 10;
+          Speed();
+          break;        
+      }
 }
 
 void CountTime(){
@@ -433,6 +465,14 @@ void BuzzerSignal(int duration, int customDelay){
     digitalWrite(buzzer,LOW);
     delay(customDelay);
   }
+}
+
+void AuthFailedBuzzer(){
+  BuzzerSignal(50, 2);
+  delay(50);
+  BuzzerSignal(50, 2);
+  delay(50);
+  BuzzerSignal(50, 2);
 }
 
 //These functions control the H-bridge and motors via switching different pins between high and low

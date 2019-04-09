@@ -1,3 +1,5 @@
+/* This sketch uses the SPI, Wire, LiquidCrystal_I2C, MFRC522 libraries which can all be found in the Arduino Library Manager
+   Author: Dominik Boschert, Moritz Sauer */
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Wire.h>
@@ -68,8 +70,194 @@ void loop() {
       UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
     }
     currentUser = RFIDCheck(currentUser);
+    boolean activeInput = false;
     if(Serial.available()){
-      switch((char) GetBlueToothInput()){
+      EvaluateBlueToothInput();
+    }
+  }
+  //If there is no authenticated user
+  else {
+    currentUser = RFIDCheck(currentUser);
+    if(currentUser >= 0 && currentUser <= 1){
+      currentMillis = millis();
+      oldMillis = currentMillis;
+      UpdateLCD(0, 0, TimeToString(LCDtext, sessionTime, 0));
+      UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
+    }
+  }
+}
+
+//Checks if a PICC is in range and tries to ommunicate with it to authenticate a user
+int RFIDCheck(int userID){
+  //Checks if a new PICC is in range
+  if(!mfrc522.PICC_IsNewCardPresent()){
+    return userID;
+  }
+
+
+
+  //Try to get the uid of the PICC
+  if(!mfrc522.PICC_ReadCardSerial()){
+    return userID;
+  }
+  
+  //Check for compatibility
+  if(!RFIDCheckPICCType()){
+    return userID;
+  }
+
+  //Variables
+  MFRC522::StatusCode status;
+  byte buffer[18];
+  byte size = sizeof(buffer);
+  //Temporary variable, stores the user ID/index if one is succesfully authenticated, needed because the RFIDCheck
+  //can still fail after successful authentication which will then return the origial ID (variable userID)
+  int UID = userID;
+  //Try to authenticate with the PICC for sector 0
+  if(!RFIDAuth(3)){
+    return userID;
+  }
+  //Ty to read data from block 1 (block 1 is set up to contain our user ID) 
+  if(!RFIDRead(1,  buffer, size)){
+    return userID;
+  }
+
+  //if there is currently no authenticated user and the lock is active
+  if(userID == -1){
+  //Check if read data matches a user
+    if(!RFIDCheckUserList(buffer, &UID)){
+      return userID;
+    }
+    
+    //Try to authenticate with the PICC for sector 1
+    if(!RFIDAuth(7)){
+      return userID;
+    }
+
+    //Try to read data from block 4 (block 4 is set up to contain the saved usage time)
+    if(!RFIDRead(4, buffer, size)){
+      return userID;
+    }
+
+    usageTime = (unsigned long) *buffer; //convert the read usage time to unsigned long and store it in the global variable
+
+    BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
+  }
+  else{
+    int tmpUID;
+    
+    //Check if read data matches a user
+    if(!RFIDCheckUserList(buffer, &tmpUID)){
+      return userID;
+    }
+
+    if(tmpUID != UID){
+      RFIDStopConnection();
+      AuthFailedBuzzer();
+      return userID;
+    }
+    
+    //Try to authenticate with the PICC for sector 1
+    if(!RFIDAuth(7)){
+      return userID;
+    }
+
+    //Try to write into block 4
+    if(!RFIDWrite(4)){
+      return userID;
+    }
+    UID = -1; //User deauthenticated
+    Stop(); //stop both motors
+    
+    //Update LCD with the text signaling that the lock is active
+    UpdateLCD(0,1,"");
+    UpdateLCD(0,0, "Sperre aktiv");
+    sessionTime = 0; //Reset time of current session
+    BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
+  }
+  RFIDStopConnection();
+  return UID;
+}
+
+boolean RFIDCheckPICCType(){
+  //Get PICC type and check if it's compatible with our PCD
+  MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+  if(piccType != MFRC522::PICC_TYPE_MIFARE_MINI
+                &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
+                &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K){
+    AuthFailedBuzzer();
+    RFIDStopConnection();
+    return false;
+  }
+  return true;
+}
+
+boolean RFIDAuth(byte trailerBlock){
+  //Try to authenticate with the "A" key
+  MFRC522::StatusCode status;
+  status = (MFRC522::StatusCode) mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key, &(mfrc522.uid));
+  if(status != MFRC522::STATUS_OK){
+    AuthFailedBuzzer();
+    RFIDStopConnection();
+    return false;
+  }
+  return true;
+}
+
+boolean RFIDRead(byte block, byte *bufferAdr, byte size){
+  //Try to read the data from the block
+  MFRC522::StatusCode status;
+  status = (MFRC522::StatusCode) mfrc522.MIFARE_Read(block, bufferAdr, &size);
+  if(status != MFRC522::STATUS_OK) {
+    AuthFailedBuzzer();
+    RFIDStopConnection();
+    return false;
+  }    
+  return true;
+}
+
+boolean RFIDWrite(byte block){
+  //Try to write usageTime to PICC
+  MFRC522::StatusCode status;
+  byte dataBlock[16] = {usageTime};
+  status = (MFRC522::StatusCode) mfrc522.MIFARE_Write(block,dataBlock, 16);
+  if(status != MFRC522::STATUS_OK) {
+    AuthFailedBuzzer();
+    RFIDStopConnection();
+    return false;
+  }
+  return true;
+}
+
+boolean RFIDCheckUserList(byte bufferCpy[18], int *UIDAdr){
+  //Check the given byte array against the byte arrays in userList until a match is found or there are no new byte arrays left in userList
+  byte count = 0;
+  for(byte user = 0; user < 2; user++){
+    for (byte i = 0; i < 16; i++) {
+      if (bufferCpy[i] == userList[user][i]){
+        count++;
+      }
+    }
+    if (count == 16) {
+      *UIDAdr = user;
+      return true;
+    }
+    count = 0; //Reset count of matching bytes after each byte array
+  }
+  AuthFailedBuzzer();
+  RFIDStopConnection();
+  return false;
+}
+
+void RFIDStopConnection(){
+  //Instruct PICC to go from State "Active" to state "Halt"
+  mfrc522.PICC_HaltA();
+  //Leave "authenticated" state on the PCD, if this is not done there cannot be another connection
+  mfrc522.PCD_StopCrypto1();
+}
+
+void EvaluateBlueToothInput(){
+  switch((char) GetBlueToothInput()){
         case 'F': Forward();
           break;
         case 'B': Backward();
@@ -123,162 +311,6 @@ void loop() {
           Speed();
           break;        
       }
-    }
-  }
-  //If there is no authenticated user
-  else {
-    currentUser = RFIDCheck(currentUser);
-    if(currentUser >= 0 && currentUser <= 1){
-      currentMillis = millis();
-      oldMillis = currentMillis;
-      UpdateLCD(0, 0, TimeToString(LCDtext, sessionTime, 0));
-      UpdateLCD(0, 1, TimeToString(LCDtext, usageTime, 1));
-    }
-  }
-}
-
-//Checks if a PICC is in range and tries to ommunicate with it to authenticate a user
-int RFIDCheck(int userID){
-  //Checks if a new PICC is in range
-  if(!mfrc522.PICC_IsNewCardPresent()){
-    return userID;
-  }
-
-  //Try to get the uid of the PICC
-  if(!mfrc522.PICC_ReadCardSerial()){
-    return userID;
-  }
-  
-  //Check for compatibility
-  if(!RFIDCheckPICCType()){
-    return userID;
-  }
-
-  //Variables
-  MFRC522::StatusCode status;
-  byte buffer[18];
-  byte size = sizeof(buffer);
-  //Temporary variable, stores the user ID/index if one is succesfully authenticated, needed because the RFIDCheck
-  //can still fail after successful authentication which will then return the origial ID (variable userID)
-  int UID = userID;
-
-  //Try to authenticate with the PICC for sector 0
-  if(!RFIDAuth(3)){
-    return userID;
-  }
-  
-  //Ty to read data from block 1 (block 1 is set up to contain our user ID) 
-  if(!RFIDRead(1,  buffer, size)){
-    return userID;
-  }
-
-  //if there is currently no authenticated user and the lock is active
-  if(userID == -1){
-  //Check if read data matches a user
-    if(!RFIDCheckUserList(buffer, &UID)){
-      return userID;
-    }
-    
-    //Try to authenticate with the PICC for sector 1
-    if(!RFIDAuth(7)){
-      return userID;
-    }
-
-    //Try to read data from block 4 (block 4 is set up to contain the saved usage time)
-    if(!RFIDRead(4, buffer, size)){
-      return userID;
-    }
-    
-    usageTime = (unsigned long) *buffer; //convert the read usage time to unsigned long and store it in the global variable
-    BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
-  }
-  else{
-    //Try to authenticate with the PICC for sector 1
-    if(!RFIDAuth(7)){
-      return userID;
-    }
-
-    //Try to write into block 4
-    if(!RFIDWrite(4)){
-      return userID;
-    }
-    UID = -1; //User deauthenticated
-    Stop(); //stop both motors
-    //Update LCD with the text signaling that the lock is active
-    UpdateLCD(0,1,"");
-    UpdateLCD(0,0, "Sperre aktiv");
-    sessionTime = 0; //Reset time of current session
-    BuzzerSignal(100, 2); //Give audible signal that the RFID check is done
-  }
-  RFIDStopConnection();
-  return UID;
-}
-
-boolean RFIDCheckPICCType(){
-  //Get PICC type and check if it's compatible with our PCD
-  MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
-  if(piccType != MFRC522::PICC_TYPE_MIFARE_MINI
-                &&  piccType != MFRC522::PICC_TYPE_MIFARE_1K
-                &&  piccType != MFRC522::PICC_TYPE_MIFARE_4K){
-    return false;
-  }
-  return true;
-}
-
-boolean RFIDAuth(byte trailerBlock){
-  //Try to authenticate with the "A" key
-  MFRC522::StatusCode status;
-  status = (MFRC522::StatusCode) mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key, &(mfrc522.uid));
-  if(status != MFRC522::STATUS_OK){
-    return false;
-  }
-  return true;
-}
-
-boolean RFIDRead(byte block, byte *bufferAdr, byte size){
-  //Try to read the data from the block
-  MFRC522::StatusCode status;
-  status = (MFRC522::StatusCode) mfrc522.MIFARE_Read(block, bufferAdr, &size);
-  if(status != MFRC522::STATUS_OK) {
-    return false;
-  }    
-  return true;
-}
-
-boolean RFIDWrite(byte block){
-  //Try to write usageTime to PICC
-  MFRC522::StatusCode status;
-  byte dataBlock[16] = {usageTime};
-  status = (MFRC522::StatusCode) mfrc522.MIFARE_Write(block,dataBlock, 16);
-  if(status != MFRC522::STATUS_OK) {
-    return false;
-  }
-  return true;
-}
-
-boolean RFIDCheckUserList(byte bufferCpy[18], int *UIDAdr){
-  //Check the given byte array against the byte arrays in userList until a match is found or there are no new byte arrays left in userList
-  byte count = 0;
-  for(byte user = 0; user < 2; user++){
-    for (byte i = 0; i < 16; i++) {
-      if (bufferCpy[i] == userList[user][i]){
-        count++;
-      }
-    }
-    if (count == 16) {
-      *UIDAdr = user;
-      return true;
-    }
-    count = 0; //Reset count of matching bytes after each byte array
-  }
-  return false;
-}
-
-void RFIDStopConnection(){
-  //Instruct PICC to go from State "Active" to state "Halt"
-  mfrc522.PICC_HaltA();
-  //Leave "authenticated" state on the PCD, if this is not done there cannot be another connection
-  mfrc522.PCD_StopCrypto1();
 }
 
 void CountTime(){
@@ -315,6 +347,7 @@ char * TimeToString(char *textVar, unsigned long t, int type){
     int s = t % 60;
     sprintf(textVar, "%02d Tage %02d:%02d:%02d", d, h, m, s);
   }
+  
   delay(20); //Delay to ensure the LCD has finished writing. LCD output will be bugged if this isn't done. 
   return textVar; 
 }
@@ -336,6 +369,15 @@ void BuzzerSignal(int duration, int customDelay){
   }
 }
 
+void AuthFailedBuzzer(){
+  //Create three short beeps
+  BuzzerSignal(50, 2);
+  delay(50);
+  BuzzerSignal(50, 2);
+  delay(50);
+  BuzzerSignal(50, 2);
+}
+
 //These functions control the H-bridge and motors via switching different pins between high and low
 void Speed(){
   //Set the speed of the motors via 8 bit number (NOTE: motors seem to be too weak to spin the wheels below 75
@@ -353,6 +395,7 @@ void Stop(){
 }
 
 void Forward(){
+  //Accelerate Forward 
   Speed();
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -361,6 +404,7 @@ void Forward(){
 }
 
 void Backward(){
+  //Accelarte backward
   Speed();
   digitalWrite(in1, LOW);
   digitalWrite(in2, HIGH);
@@ -369,6 +413,7 @@ void Backward(){
 }
 
 void Left(){
+  //Turn Left
   Speed();
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
@@ -377,6 +422,7 @@ void Left(){
 }
 
 void Right(){
+  //Turn Right
   Speed();
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
@@ -395,7 +441,7 @@ void ForwardLeft(){
 }
 
 void ForwardRight(){
-  //Put one motor on 50% of the speed of the other to be able to turn while keeping forward acceleration
+  //Put one motor on 50% of the speed of the other to turn while keeping forward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
   digitalWrite(in1, HIGH);
@@ -405,7 +451,7 @@ void ForwardRight(){
 }
 
 void BackwardLeft(){
-  //Put one motor on 50% of the speed of the other to be able to turn while keeping backward acceleration
+  //Put one motor on 50% of the speed of the other to turn while keeping backward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM1, (int) level);
   digitalWrite(in1, LOW);
@@ -415,7 +461,7 @@ void BackwardLeft(){
 }
 
 void BackwardRight(){
-  //Put one motor on 50% of the speed of the other to be able to turn while keeping backward acceleration
+  //Put one motor on 50% of the speed of the other to turn while keeping backward acceleration
   double level = 255 *((double) currentSpeed / 10) / 2;
   analogWrite(GSM2, (int) level);
   digitalWrite(in1, LOW);
