@@ -1,4 +1,9 @@
-BT controller:  
+This is the repository for a mobile robot. It was created for a school project during our first year of vocational training.
+
+The basis was an Arduino Uno board, and the goal was to develop a Bluetooth controlled mobile robot. In addition we had to implement a RFID lock as well as a usage time tracker and display.
+
+The free Android app "Arduino Bluetooth RC Car" by Andi.Co was used as the controller app.
+Bytes send from each button are as follows:
 Forward           ->  F  
 Back              ->  B  
 Left              ->  L  
